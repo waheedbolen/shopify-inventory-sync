@@ -220,26 +220,35 @@ async function getInventoryItemLocationId(inventoryItemId) {
   try {
     // GraphQL query to get inventory level
     const query = `
-      query getInventoryLevel($inventoryItemId: ID!) {
-        inventoryLevel(inventoryItemId: $inventoryItemId) {
-          location {
-            id
+      query getInventoryLevels($inventoryItemId: ID!) {
+        inventoryItem(id: $inventoryItemId) {
+          inventoryLevels(first: 1) {
+            edges {
+              node {
+                location {
+                  id
+                }
+              }
+            }
           }
         }
       }
     `;
     
     const variables = {
-      inventoryItemId
+      inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`
     };
     
     const result = await shopifyClient.request(query, variables);
     
-    if (!result.inventoryLevel || !result.inventoryLevel.location) {
+    if (!result.inventoryItem || 
+        !result.inventoryItem.inventoryLevels || 
+        !result.inventoryItem.inventoryLevels.edges || 
+        result.inventoryItem.inventoryLevels.edges.length === 0) {
       return null;
     }
     
-    return result.inventoryLevel.location.id;
+    return result.inventoryItem.inventoryLevels.edges[0].node.location.id;
   } catch (error) {
     console.error('Error getting inventory item location:', error);
     throw error;
