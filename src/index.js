@@ -2,7 +2,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { Shopify } = require('@shopify/shopify-api');
+const { shopifyApi } = require('@shopify/shopify-api');
 const config = require('./config');
 const webhookHandlers = require('./webhookHandlers');
 const inventoryService = require('./inventoryService');
@@ -16,7 +16,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Initialize Shopify API
-const shopify = new Shopify({
+const shopify = new shopifyApi({
   apiKey: config.shopify.apiKey,
   apiSecretKey: config.shopify.apiSecretKey,
   scopes: config.shopify.scopes,
