@@ -190,7 +190,7 @@ async function updateShopifyInventory(inventoryItemId, availableQuantity) {
     
     const variables = {
       input: {
-        inventoryItemId,
+        inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`,
         locationId,
         availableQuantity
       }
