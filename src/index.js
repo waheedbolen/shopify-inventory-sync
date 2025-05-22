@@ -2,7 +2,9 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { shopifyApi } = require('@shopify/shopify-api');
+const { shopifyApi, LATEST_API_VERSION } = require('@shopify/shopify-api');
+const { restResources } = require('@shopify/shopify-api/rest/admin/2023-10');
+const { Node } = require('@shopify/shopify-api/adapters');
 const config = require('./config');
 const webhookHandlers = require('./webhookHandlers');
 const inventoryService = require('./inventoryService');
@@ -16,13 +18,15 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Initialize Shopify API
-const shopify = new shopifyApi({
+const shopify = shopifyApi({
   apiKey: config.shopify.apiKey,
   apiSecretKey: config.shopify.apiSecretKey,
   scopes: config.shopify.scopes,
   hostName: config.shopify.hostName,
-  apiVersion: config.shopify.apiVersion,
-  isEmbeddedApp: false
+  apiVersion: config.shopify.apiVersion || LATEST_API_VERSION,
+  isEmbeddedApp: false,
+  adapter: Node,
+  restResources
 });
 
 // Register webhook handlers
