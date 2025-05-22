@@ -66,32 +66,45 @@ async function handleCartAddition(variantId) {
     }
     
     // Get current inventory level
-    const currentInventory = productGroup.sharedInventoryCount;
+    async function getInventoryLevel(inventoryItemId) {
+  try {
+    console.log(`Fetching inventory level for item ${inventoryItemId}...`);
     
-    // If inventory is already zero, return error
-    if (currentInventory <= 0) {
-      return { success: false, message: 'Item is out of stock' };
+    // First, we need to get the inventory level ID
+    const inventoryLevelsQuery = `
+      query getInventoryLevels($inventoryItemId: ID!) {
+        inventoryItem(id: $inventoryItemId) {
+          inventoryLevels(first: 1) {
+            edges {
+              node {
+                id
+                available
+                location {
+                  id
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+    
+    const variables = {
+      inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`
+    };
+    
+    const result = await shopifyClient.request(inventoryLevelsQuery, variables);
+    
+    if (!result.inventoryItem || 
+        !result.inventoryItem.inventoryLevels || 
+        !result.inventoryItem.inventoryLevels.edges || 
+        result.inventoryItem.inventoryLevels.edges.length === 0) {
+      return 0;
     }
     
-    // Temporarily reduce inventory for all variants
-    const newInventory = currentInventory - 1;
-    await syncInventoryForItem(productGroup.inventoryItemIds[0], newInventory);
-    
-    // Start a timeout to restore inventory if checkout is not completed
-    // In a real implementation, this would be handled by a more robust system
-    // such as a database record with a timestamp and a periodic cleanup job
-    setTimeout(async () => {
-      // Check if the order was completed before restoring inventory
-      const isOrderCompleted = await checkIfOrderCompleted(variantId);
-      if (!isOrderCompleted) {
-        console.log(`Restoring inventory for abandoned cart item ${variantId}`);
-        await syncInventoryForItem(productGroup.inventoryItemIds[0], currentInventory);
-      }
-    }, 30 * 60 * 1000); // 30 minutes timeout
-    
-    return { success: true, message: 'Item added to cart and inventory updated' };
+    return result.inventoryItem.inventoryLevels.edges[0].node.available;
   } catch (error) {
-    console.error('Error handling cart addition:', error);
+    console.error(`Error fetching inventory level for item ${inventoryItemId}:`, error);
     throw error;
   }
 }
