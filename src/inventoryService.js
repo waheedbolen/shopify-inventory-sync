@@ -67,45 +67,70 @@ async function handleCartAddition(variantId) {
     
     // Get current inventory level
     async function getInventoryLevel(inventoryItemId) {
-  try {
-    console.log(`Fetching inventory level for item ${inventoryItemId}...`);
-    
-    // First, we need to get the inventory level ID
-    const inventoryLevelsQuery = `
-      query getInventoryLevels($inventoryItemId: ID!) {
-        inventoryItem(id: $inventoryItemId) {
-          inventoryLevels(first: 1) {
-            edges {
-              node {
-                id
-                available
-                location {
-                  id
+      try {
+        console.log(`Fetching inventory level for item ${inventoryItemId}...`);
+        
+        // First, we need to get the inventory level ID
+        const inventoryLevelsQuery = `
+          query getInventoryLevels($inventoryItemId: ID!) {
+            inventoryItem(id: $inventoryItemId) {
+              inventoryLevels(first: 1) {
+                edges {
+                  node {
+                    id
+                    available
+                    location {
+                      id
+                    }
+                  }
                 }
               }
             }
           }
+        `;
+        
+        const variables = {
+          inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`
+        };
+        
+        const result = await shopifyClient.request(inventoryLevelsQuery, variables);
+        
+        if (!result.inventoryItem || 
+            !result.inventoryItem.inventoryLevels || 
+            !result.inventoryItem.inventoryLevels.edges || 
+            result.inventoryItem.inventoryLevels.edges.length === 0) {
+          return 0;
         }
+        
+        return result.inventoryItem.inventoryLevels.edges[0].node.available;
+      } catch (error) {
+        console.error(`Error fetching inventory level for item ${inventoryItemId}:`, error);
+        throw error;
       }
-    `;
-    
-    const variables = {
-      inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`
-    };
-    
-    const result = await shopifyClient.request(inventoryLevelsQuery, variables);
-    
-    if (!result.inventoryItem || 
-        !result.inventoryItem.inventoryLevels || 
-        !result.inventoryItem.inventoryLevels.edges || 
-        result.inventoryItem.inventoryLevels.edges.length === 0) {
-      return 0;
     }
     
-    return result.inventoryItem.inventoryLevels.edges[0].node.available;
+    // Get the inventory item ID for this variant
+    const inventoryItemId = productGroup.inventoryItemIds[0];
+    if (!inventoryItemId) {
+      console.log(`No inventory item found for variant ${variantId}`);
+      return { success: false, message: 'No inventory item found' };
+    }
+    
+    // Get current inventory level
+    const currentInventory = await getInventoryLevel(inventoryItemId);
+    
+    // If inventory is zero, reject the addition
+    if (currentInventory <= 0) {
+      return { success: false, message: 'Out of stock' };
+    }
+    
+    // Reduce inventory and update Shopify
+    await syncInventoryForItem(inventoryItemId, currentInventory - 1);
+    
+    return { success: true };
   } catch (error) {
-    console.error(`Error fetching inventory level for item ${inventoryItemId}:`, error);
-    throw error;
+    console.error('Error handling cart addition:', error);
+    return { success: false, message: 'Error processing cart addition' };
   }
 }
 
