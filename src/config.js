@@ -3,6 +3,7 @@ require('dotenv').config();
 const config = {
   shopify: {
     apiKey: process.env.SHOPIFY_API_KEY || 'your_api_key',
+    accessToken: process.env.SHOPIFY_ACCESS_TOKEN || 'your_access_token',
     apiSecretKey: process.env.SHOPIFY_API_SECRET_KEY || 'your_api_secret_key',
     scopes: [
       'read_products',
