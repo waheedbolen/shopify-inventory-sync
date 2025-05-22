@@ -146,28 +146,27 @@ async function getAllProducts() {
     
     // GraphQL query to get all products with variants
     const query = `
-      query {
-        products(first: 250) {
-          edges {
-            node {
-              id
-              title
-              variants(first: 100) {
-                edges {
-                  node {
-                    id
-                    title
-                    inventoryItem {
-                      id
-                    }
-                  }
+  query {
+    products(first: 250) {
+      edges {
+        node {
+          id
+          title
+          variants(first: 100) {
+            edges {
+              node {
+                id
+                inventoryItem {
+                  id
                 }
               }
             }
           }
         }
       }
-    `;
+    }
+  }
+`;
     
     const result = await shopifyClient.request(query);
     
