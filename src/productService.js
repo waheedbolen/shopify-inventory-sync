@@ -8,7 +8,7 @@ const shopifyClient = new GraphQLClient(
   `https://${config.shopify.hostName}/admin/api/${config.shopify.apiVersion}/graphql.json`,
   {
     headers: {
-      'X-Shopify-Access-Token': config.shopify.apiSecretKey,
+      'X-Shopify-Access-Token': config.shopify.accessToken,
       'Content-Type': 'application/json',
     },
   }
