@@ -20,9 +20,4 @@
   "devDependencies": {
     "jest": "^29.7.0"
   }
-},
-"scripts": {
-  "start": "node src/index.js",
-  "build": "npm install",
-  "test": "echo \"Error: no test specified\" && exit 1"
 }
