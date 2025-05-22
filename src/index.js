@@ -4,7 +4,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const { shopifyApi, LATEST_API_VERSION } = require('@shopify/shopify-api');
 const { restResources } = require('@shopify/shopify-api/rest/admin/2023-10');
-const { Node } = require('@shopify/shopify-api/adapters');
+const { NodeAdapter } = require('@shopify/shopify-api/adapters/node');
 const config = require('./config');
 const webhookHandlers = require('./webhookHandlers');
 const inventoryService = require('./inventoryService');
@@ -25,7 +25,7 @@ const shopify = shopifyApi({
   hostName: config.shopify.hostName,
   apiVersion: config.shopify.apiVersion || LATEST_API_VERSION,
   isEmbeddedApp: false,
-  adapter: Node,
+  adapter: NodeAdapter,
   restResources
 });
 
