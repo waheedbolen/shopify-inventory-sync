@@ -13,7 +13,7 @@ const config = {
       'write_orders'
     ],
     hostName: process.env.SHOPIFY_HOST_NAME || 'your-store.myshopify.com',
-    apiVersion: '2023-10' // Update to the latest stable version
+    apiVersion: '2025‑04' // Update to the latest stable version
   },
   app: {
     port: process.env.PORT || 3000,
