@@ -264,11 +264,11 @@ async function getInventoryLevel(inventoryItemId) {
     const query = `
       query getInventoryLevel($inventoryItemId: ID!) {
         inventoryItem(id: $inventoryItemId) {
-          inventoryLevels(first: 5) {
+          inventoryLevels(first: 5) { # Assuming we might check up to 5 locations/levels for the item
             edges {
               node {
-                quantities(first: 5) { # Assuming we might have a few quantity types
-                  name
+                quantities(names: ["available"]) { # Request only "available" quantity
+                  name # name will be "available"
                   quantity
                 }
               }
@@ -289,11 +289,14 @@ async function getInventoryLevel(inventoryItemId) {
     
     if (result.inventoryItem && result.inventoryItem.inventoryLevels && result.inventoryItem.inventoryLevels.edges) {
       for (const edge of result.inventoryItem.inventoryLevels.edges) {
-        if (edge.node && edge.node.quantities) {
-          for (const quantityInfo of edge.node.quantities) {
-            if (quantityInfo.name === "available") {
-              totalAvailable += quantityInfo.quantity;
-            }
+        // Check if node and quantities exist, and quantities array is not empty
+        if (edge.node && edge.node.quantities && edge.node.quantities.length > 0) {
+          // The query requests quantities(names: ["available"]), so the first item 
+          // in the quantities array should be the "available" quantity.
+          // We also check name for robustness, though it should always be "available".
+          const quantityInfo = edge.node.quantities[0];
+          if (quantityInfo && quantityInfo.name === "available") {
+            totalAvailable += quantityInfo.quantity;
           }
         }
       }

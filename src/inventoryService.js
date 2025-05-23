@@ -78,8 +78,8 @@ async function handleCartAddition(variantId) {
                 edges {
                   node {
                     id
-                    quantities(first: 5) { # Assuming "available" is within first 5 types
-                      name
+                    quantities(names: ["available"]) { # Request only "available" quantity
+                      name # name should be "available"
                       quantity
                     }
                     location {
@@ -106,13 +106,16 @@ async function handleCartAddition(variantId) {
             result.inventoryItem.inventoryLevels.edges &&
             result.inventoryItem.inventoryLevels.edges.length > 0 &&
             result.inventoryItem.inventoryLevels.edges[0].node &&
-            result.inventoryItem.inventoryLevels.edges[0].node.quantities) {
+            result.inventoryItem.inventoryLevels.edges[0].node.quantities &&
+            result.inventoryItem.inventoryLevels.edges[0].node.quantities.length > 0) {
           
-          const quantities = result.inventoryItem.inventoryLevels.edges[0].node.quantities;
-          const availableEntry = quantities.find(q => q.name === "available");
+          // The query requests quantities(names: ["available"]), 
+          // so quantities[0] should be the "available" quantity.
+          const quantityInfo = result.inventoryItem.inventoryLevels.edges[0].node.quantities[0];
           
-          if (availableEntry) {
-            availableQuantity = availableEntry.quantity;
+          // Check name for robustness, though it should always be "available".
+          if (quantityInfo && quantityInfo.name === "available") {
+            availableQuantity = quantityInfo.quantity;
           }
         }
         
