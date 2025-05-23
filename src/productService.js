@@ -146,13 +146,13 @@ async function getAllProducts() {
     
     // GraphQL query to get all products with variants
     const query = `
-  query {
-    products(first: 250) {
+  query getAllProductsQuery($after: String) {
+    products(first: 250, after: $after) {
       edges {
         node {
           id
           title
-          variants(first: 100) {
+          variants(first: 100) { # Variants pagination not handled in this step
             edges {
               node {
                 id
@@ -164,31 +164,60 @@ async function getAllProducts() {
           }
         }
       }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
   }
 `;
     
-    const result = await shopifyClient.request(query);
-    
-    // Transform the GraphQL response to a simpler format
-    const products = result.products.edges.map(edge => {
-      const product = edge.node;
-      return {
-        id: product.id.replace('gid://shopify/Product/', ''),
-        title: product.title,
-        variants: product.variants.edges.map(variantEdge => {
-          const variant = variantEdge.node;
+    let allProductsArray = [];
+    let afterCursor = null;
+    let hasNextPage = true;
+    let pageCount = 0;
+
+    do {
+      pageCount++;
+      console.log(`Fetching page ${pageCount} of products, after cursor: ${afterCursor}`);
+      const result = await shopifyClient.request(query, { after: afterCursor });
+
+      if (result && result.products && result.products.edges && result.products.pageInfo) {
+        const fetchedProducts = result.products.edges.map(edge => {
+          const product = edge.node;
           return {
-            id: variant.id.replace('gid://shopify/ProductVariant/', ''),
-            title: variant.title,
-            inventory_item_id: variant.inventoryItem.id.replace('gid://shopify/InventoryItem/', '')
+            id: product.id.replace('gid://shopify/Product/', ''),
+            title: product.title,
+            variants: product.variants.edges.map(variantEdge => {
+              const variant = variantEdge.node;
+              return {
+                id: variant.id.replace('gid://shopify/ProductVariant/', ''),
+                title: variant.title,
+                inventory_item_id: variant.inventoryItem.id.replace('gid://shopify/InventoryItem/', '')
+              };
+            })
           };
-        })
-      };
-    });
+        });
+        
+        allProductsArray = allProductsArray.concat(fetchedProducts);
+        hasNextPage = result.products.pageInfo.hasNextPage;
+        afterCursor = result.products.pageInfo.endCursor;
+        
+        console.log(`Fetched a page of products. Total products so far: ${allProductsArray.length}. Has next page: ${hasNextPage}`);
+        
+        // Safety break if endCursor is null but hasNextPage is true (should not happen with Shopify)
+        if (hasNextPage && !afterCursor) {
+            console.warn('hasNextPage is true but endCursor is null. Breaking loop to prevent infinite loop.');
+            break;
+        }
+      } else {
+        console.error('Error fetching a page of products or pageInfo missing. Breaking loop.', result);
+        hasNextPage = false; // Stop the loop
+      }
+    } while (hasNextPage);
     
-    console.log(`Found ${products.length} products`);
-    return products;
+    console.log(`Finished fetching all pages. Total products found: ${allProductsArray.length}`);
+    return allProductsArray;
   } catch (error) {
     console.error('Error fetching products:', error);
     throw error;
