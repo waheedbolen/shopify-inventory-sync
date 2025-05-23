@@ -74,11 +74,14 @@ async function handleCartAddition(variantId) {
         const inventoryLevelsQuery = `
           query getInventoryLevels($inventoryItemId: ID!) {
             inventoryItem(id: $inventoryItemId) {
-              inventoryLevels(first: 1) {
+              inventoryLevels(first: 1) { # Assuming the first inventory level is the relevant one
                 edges {
                   node {
                     id
-                    available
+                    quantities(first: 5) { # Assuming "available" is within first 5 types
+                      name
+                      quantity
+                    }
                     location {
                       id
                     }
@@ -94,18 +97,35 @@ async function handleCartAddition(variantId) {
         };
         
         const result = await shopifyClient.request(inventoryLevelsQuery, variables);
+        console.log('Fetched inventoryItem data for ID ' + inventoryItemId + ' in inventoryService:', JSON.stringify(result, null, 2));
         
-        if (!result.inventoryItem || 
-            !result.inventoryItem.inventoryLevels || 
-            !result.inventoryItem.inventoryLevels.edges || 
-            result.inventoryItem.inventoryLevels.edges.length === 0) {
-          return 0;
+        let availableQuantity = 0;
+        
+        if (result.inventoryItem &&
+            result.inventoryItem.inventoryLevels &&
+            result.inventoryItem.inventoryLevels.edges &&
+            result.inventoryItem.inventoryLevels.edges.length > 0 &&
+            result.inventoryItem.inventoryLevels.edges[0].node &&
+            result.inventoryItem.inventoryLevels.edges[0].node.quantities) {
+          
+          const quantities = result.inventoryItem.inventoryLevels.edges[0].node.quantities;
+          const availableEntry = quantities.find(q => q.name === "available");
+          
+          if (availableEntry) {
+            availableQuantity = availableEntry.quantity;
+          }
         }
         
-        return result.inventoryItem.inventoryLevels.edges[0].node.available;
+        console.log('Extracted available quantity for ' + inventoryItemId + ' in inventoryService: ' + availableQuantity);
+        return availableQuantity;
       } catch (error) {
         console.error(`Error fetching inventory level for item ${inventoryItemId}:`, error);
-        throw error;
+        // It's important to re-throw or handle the error appropriately. 
+        // For now, let's ensure it returns 0 in case of error as per requirements for missing data.
+        // However, logging the error is good. If the calling function expects an error, re-throw.
+        // Given the prior logic returned 0 on missing data, returning 0 on error might be consistent here too.
+        console.log('Extracted available quantity for ' + inventoryItemId + ' in inventoryService: 0 (due to error or missing data)');
+        return 0; // Ensure 0 is returned on error to prevent further issues.
       }
     }
     

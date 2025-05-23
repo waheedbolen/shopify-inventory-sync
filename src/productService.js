@@ -263,8 +263,17 @@ async function getInventoryLevel(inventoryItemId) {
     // GraphQL query to get inventory level
     const query = `
       query getInventoryLevel($inventoryItemId: ID!) {
-        inventoryLevel(inventoryItemId: $inventoryItemId) {
-          available
+        inventoryItem(id: $inventoryItemId) {
+          inventoryLevels(first: 5) {
+            edges {
+              node {
+                quantities(first: 5) { # Assuming we might have a few quantity types
+                  name
+                  quantity
+                }
+              }
+            }
+          }
         }
       }
     `;
@@ -274,12 +283,24 @@ async function getInventoryLevel(inventoryItemId) {
     };
     
     const result = await shopifyClient.request(query, variables);
+    console.log('Fetched inventoryItem data for ID ' + inventoryItemId + ':', JSON.stringify(result, null, 2));
     
-    if (!result.inventoryLevel) {
-      return 0;
+    let totalAvailable = 0;
+    
+    if (result.inventoryItem && result.inventoryItem.inventoryLevels && result.inventoryItem.inventoryLevels.edges) {
+      for (const edge of result.inventoryItem.inventoryLevels.edges) {
+        if (edge.node && edge.node.quantities) {
+          for (const quantityInfo of edge.node.quantities) {
+            if (quantityInfo.name === "available") {
+              totalAvailable += quantityInfo.quantity;
+            }
+          }
+        }
+      }
     }
     
-    return result.inventoryLevel.available;
+    console.log('Calculated total available inventory for ' + inventoryItemId + ': ' + totalAvailable);
+    return totalAvailable;
   } catch (error) {
     console.error(`Error fetching inventory level for item ${inventoryItemId}:`, error);
     throw error;
