@@ -10,6 +10,7 @@ const shopifyClient = new GraphQLClient(
     headers: {
       'X-Shopify-Access-Token': config.shopify.accessToken,
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     },
   }
 );
