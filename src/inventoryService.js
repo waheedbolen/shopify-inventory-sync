@@ -240,7 +240,7 @@ async function updateShopifyInventory(inventoryItemId, availableQuantity) {
     const variables = {
       input: {
         name: "available", // Specifies that we are setting the "available" quantity type
-        reason: "app_inventory_sync", // A reason for the adjustment
+        reason: "other", // Changed to "other"
         ignoreCompareQuantity: true, // Opt-out of compare-and-set for simplicity
         quantities: [
           {
