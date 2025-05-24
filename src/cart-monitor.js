@@ -10,7 +10,7 @@
  */
 (function() {
   // Configuration
-  const APP_SERVER_URL = '{{APP_SERVER_URL}}'; // Will be replaced with actual URL during installation
+  const APP_SERVER_URL = 'https://shopify-inventory-sync-nl7a.onrender.com'; // Will be replaced with actual URL during installation
   
   // Wait for DOM to be ready
   document.addEventListener('DOMContentLoaded', function() {
