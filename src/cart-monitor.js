@@ -69,8 +69,32 @@
       const response = await notifyCartAddition(variantId);
       
       if (response.success) {
-        // Continue with the original form submission
-        form.submit();
+        const originalTarget = event.target;
+        let submissionResumed = false;
+
+        // Try to re-trigger the original event if it was a click on an element (not the form itself)
+        // This allows theme's native JS (especially for AJAX carts) to handle the submission.
+        if (originalTarget && typeof originalTarget.click === 'function' && originalTarget !== form) {
+          try {
+            // Remove our event listener to prevent an infinite loop of our handler
+            originalTarget.removeEventListener(event.type, handleAddToCart);
+            console.log('Shopify Inventory Sync: Re-triggering original click event.');
+            originalTarget.click(); // Re-click the button/element
+            submissionResumed = true; // Assume the click will handle the submission
+          } catch (e) {
+            console.warn('Shopify Inventory Sync: Error re-triggering click, falling back to form.submit().', e);
+            // If re-triggering fails, fall back to form.submit()
+            submissionResumed = false;
+          }
+        }
+
+        // If the original target was the form, or if re-triggering click didn't work, submit the form directly.
+        if (!submissionResumed) {
+          console.log('Shopify Inventory Sync: Proceeding with form.submit().');
+          // Remove the listener from the form to prevent our handler from running again on direct submit
+          form.removeEventListener('submit', handleAddToCart);
+          form.submit();
+        }
       } else {
         // Show error message
         showErrorMessage(form, response.message || 'This item is no longer available');
@@ -78,8 +102,14 @@
     } catch (error) {
       console.error('Shopify Inventory Sync: Error handling add to cart', error);
       // Allow the form submission to continue to avoid blocking the user
-      if (event.target.tagName === 'FORM') {
-        event.target.submit();
+      // This outer catch is for errors in our handleAddToCart logic itself, not the server response.
+      // If an error occurs here, it's safer to let the original event proceed if possible.
+      // However, since we called preventDefault(), we must manually resubmit.
+      // Check if event.target is still valid and is a form.
+      if (event.target && event.target.tagName === 'FORM') {
+          event.target.submit();
+      } else if (form) { // if event.target was a button, form should be its parent form
+          form.submit();
       }
     }
   }
@@ -134,8 +164,8 @@
       return await response.json();
     } catch (error) {
       console.error('Shopify Inventory Sync: Error notifying server', error);
-      // Return success to avoid blocking the user
-      return { success: true };
+      // Return failure to prevent overselling if the server is unreachable or errors.
+      return { success: false, message: "Error: Could not verify stock. Please try again." }; 
     }
   }
   
