@@ -10,7 +10,7 @@ const shopifyClient = new GraphQLClient(
     headers: {
       'X-Shopify-Access-Token': config.shopify.accessToken,
       'Content-Type': 'application/json',
-      'Accept': 'application/json',
+      'Accept': 'application/graphql', // Changed to application/graphql
     },
   }
 );
@@ -222,12 +222,12 @@ async function updateShopifyInventory(inventoryItemId, availableQuantity) {
       return;
     }
     
-    // GraphQL mutation to set inventory level
+    // GraphQL mutation to set inventory level using inventorySetQuantities
     const mutation = `
-      mutation inventorySetQuantity($input: InventorySetQuantityInput!) {
-        inventorySetQuantity(input: $input) {
-          inventoryLevel {
-            available
+      mutation inventorySetQuantities($input: InventorySetQuantitiesInput!) {
+        inventorySetQuantities(input: $input) {
+          inventoryAdjustmentGroup {
+            createdAt 
           }
           userErrors {
             field
@@ -239,23 +239,30 @@ async function updateShopifyInventory(inventoryItemId, availableQuantity) {
     
     const variables = {
       input: {
-        inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`,
-        locationId,
-        availableQuantity
+        name: "available", // Specifies that we are setting the "available" quantity type
+        reason: "app_inventory_sync", // A reason for the adjustment
+        ignoreCompareQuantity: true, // Opt-out of compare-and-set for simplicity
+        quantities: [
+          {
+            inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`,
+            locationId: locationId, // This is already being fetched by getInventoryItemLocationId
+            quantity: availableQuantity // This is the absolute new quantity
+          }
+        ]
       }
     };
     
     const result = await shopifyClient.request(mutation, variables);
     
-    if (result.inventorySetQuantity.userErrors.length > 0) {
-      console.error('Error updating Shopify inventory:', result.inventorySetQuantity.userErrors);
-      throw new Error('Failed to update Shopify inventory');
+    if (result.inventorySetQuantities.userErrors.length > 0) {
+      console.error('Error updating Shopify inventory with inventorySetQuantities:', result.inventorySetQuantities.userErrors);
+      throw new Error('Failed to update Shopify inventory using inventorySetQuantities');
     }
     
-    console.log(`Successfully updated inventory for item ${inventoryItemId} to ${availableQuantity}`);
-    return result.inventorySetQuantity.inventoryLevel;
+    console.log('Successfully set inventory via inventorySetQuantities for item ' + inventoryItemId + '. Adjustment group created at: ' + result.inventorySetQuantities.inventoryAdjustmentGroup.createdAt);
+    return result.inventorySetQuantities; // Return the whole response part for now
   } catch (error) {
-    console.error('Error updating Shopify inventory:', error);
+    console.error('Error updating Shopify inventory with inventorySetQuantities:', error);
     throw error;
   }
 }
