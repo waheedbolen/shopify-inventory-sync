@@ -5,7 +5,7 @@ const db = require('./db');
 
 // Initialize GraphQL client for Shopify Admin API
 const shopifyClient = new GraphQLClient(
-  `https://${config.shopify.hostName}/admin/api/${config.shopify.apiVersion}/graphql.json`,
+  `https://${config.shopify.hostName}/admin/api/2025-04/graphql.json`, // Hardcoded API version
   {
     headers: {
       'X-Shopify-Access-Token': config.shopify.accessToken,
