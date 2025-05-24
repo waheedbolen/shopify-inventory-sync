@@ -252,6 +252,8 @@ async function updateShopifyInventory(inventoryItemId, availableQuantity) {
       }
     };
     
+    console.log('Variables being sent to inventorySetQuantities:', JSON.stringify(variables, null, 2));
+    console.log('Reason being sent:', variables.input.reason);
     const result = await shopifyClient.request(mutation, variables);
     
     if (result.inventorySetQuantities.userErrors.length > 0) {
