@@ -261,7 +261,11 @@ async function updateShopifyInventory(inventoryItemId, availableQuantity) {
       throw new Error('Failed to update Shopify inventory using inventorySetQuantities');
     }
     
-    console.log('Successfully set inventory via inventorySetQuantities for item ' + inventoryItemId + '. Adjustment group created at: ' + result.inventorySetQuantities.inventoryAdjustmentGroup.createdAt);
+    if (result.inventorySetQuantities.inventoryAdjustmentGroup && result.inventorySetQuantities.inventoryAdjustmentGroup.createdAt) {
+      console.log('Successfully set inventory via inventorySetQuantities for item ' + inventoryItemId + '. Adjustment group created at: ' + result.inventorySetQuantities.inventoryAdjustmentGroup.createdAt);
+    } else {
+      console.log('Successfully set inventory via inventorySetQuantities for item ' + inventoryItemId + '. No user errors. inventoryAdjustmentGroup details: ' + JSON.stringify(result.inventorySetQuantities.inventoryAdjustmentGroup, null, 2));
+    }
     return result.inventorySetQuantities; // Return the whole response part for now
   } catch (error) {
     console.error('Error updating Shopify inventory with inventorySetQuantities:', error);
