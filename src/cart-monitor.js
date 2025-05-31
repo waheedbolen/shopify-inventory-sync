@@ -67,36 +67,51 @@
       
       // Notify the app server about the cart addition
       const response = await notifyCartAddition(variantId);
+      // Ensure 'form' and 'variantId' are available from the outer scope of handleAddToCart
       
       if (response.success) {
-        const originalTarget = event.target;
+        // Polling logic removed. Proceed directly with cart re-submission.
         let submissionResumed = false;
+        const originalTarget = event.target; // 'event' is from the handleAddToCart parameter
+        // 'form' is already defined at the beginning of the try block.
 
-        // Try to re-trigger the original event if it was a click on an element (not the form itself)
-        // This allows theme's native JS (especially for AJAX carts) to handle the submission.
-        if (originalTarget && typeof originalTarget.click === 'function' && originalTarget !== form) {
-          try {
-            // Remove our event listener to prevent an infinite loop of our handler
-            originalTarget.removeEventListener(event.type, handleAddToCart);
+        console.log('Shopify Inventory Sync: Backend call successful. Proceeding with cart action.');
+
+        try {
+          if (originalTarget && typeof originalTarget.click === 'function' && originalTarget !== form) {
+            // If the original target was a clickable element (e.g., AJAX button) and not the form itself
+            originalTarget.removeEventListener(event.type, handleAddToCart); // Prevent our handler from looping
             console.log('Shopify Inventory Sync: Re-triggering original click event.');
-            originalTarget.click(); // Re-click the button/element
-            submissionResumed = true; // Assume the click will handle the submission
+            originalTarget.click();
+            submissionResumed = true;
+          }
+        } catch (e) {
+          console.warn('Shopify Inventory Sync: Re-click failed, falling back to form.submit()', e);
+          submissionResumed = false; // Ensure fallback if click fails
+        }
+
+        if (!submissionResumed && form) {
+          // If click re-triggering wasn't done, or failed, or if original target was the form
+          try {
+            // If the original event was a 'submit' on the form, remove our listener before resubmitting
+            if (originalTarget === form && event.type === 'submit') {
+               form.removeEventListener('submit', handleAddToCart);
+            } else if (originalTarget !== form && event.type === 'click') {
+              // If original event was a click on a button inside the form,
+              // we might also need to remove submit listener from parent form to be safe,
+              // especially if the button click also triggers a form submit event that bubbles up.
+              form.removeEventListener('submit', handleAddToCart);
+            }
+            // For other cases, like a button click that doesn't directly submit the form but relies on theme JS,
+            // the original click() re-trigger is preferred. This form.submit() is a fallback.
+            console.log('Shopify Inventory Sync: Proceeding with form.submit().');
+            form.submit();
           } catch (e) {
-            console.warn('Shopify Inventory Sync: Error re-triggering click, falling back to form.submit().', e);
-            // If re-triggering fails, fall back to form.submit()
-            submissionResumed = false;
+            console.error('Shopify Inventory Sync: Form submit fallback failed.', e);
           }
         }
-
-        // If the original target was the form, or if re-triggering click didn't work, submit the form directly.
-        if (!submissionResumed) {
-          console.log('Shopify Inventory Sync: Proceeding with form.submit().');
-          // Remove the listener from the form to prevent our handler from running again on direct submit
-          form.removeEventListener('submit', handleAddToCart);
-          form.submit();
-        }
       } else {
-        // Show error message
+        // Existing error handling for when response.success is false (from initial /api/cart/add call)
         showErrorMessage(form, response.message || 'This item is no longer available');
       }
     } catch (error) {

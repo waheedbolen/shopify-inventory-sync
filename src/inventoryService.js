@@ -66,73 +66,6 @@ async function handleCartAddition(variantId) {
       return { success: false, message: 'Product not found' };
     }
     
-    // Get current inventory level
-    async function getInventoryLevel(inventoryItemId) {
-      try {
-        console.log(`Fetching inventory level for item ${inventoryItemId}...`);
-        
-        // First, we need to get the inventory level ID
-        const inventoryLevelsQuery = `
-          query getInventoryLevels($inventoryItemId: ID!) {
-            inventoryItem(id: $inventoryItemId) {
-              inventoryLevels(first: 1) { # Assuming the first inventory level is the relevant one
-                edges {
-                  node {
-                    id
-                    quantities(names: ["available"]) { # Request only "available" quantity
-                      name # name should be "available"
-                      quantity
-                    }
-                    location {
-                      id
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `;
-        
-        const variables = {
-          inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`
-        };
-        
-        const result = await shopifyClient.request(inventoryLevelsQuery, variables);
-        console.log('Fetched inventoryItem data for ID ' + inventoryItemId + ' in inventoryService:', JSON.stringify(result, null, 2));
-
-        let availableQuantity = 0;
-        
-        if (result.inventoryItem &&
-            result.inventoryItem.inventoryLevels &&
-            result.inventoryItem.inventoryLevels.edges &&
-            result.inventoryItem.inventoryLevels.edges.length > 0 &&
-            result.inventoryItem.inventoryLevels.edges[0].node &&
-            result.inventoryItem.inventoryLevels.edges[0].node.quantities &&
-            result.inventoryItem.inventoryLevels.edges[0].node.quantities.length > 0) {
-
-          // The query requests quantities(names: ["available"]),
-          // so quantities[0] should be the "available" quantity.
-          const quantityInfo = result.inventoryItem.inventoryLevels.edges[0].node.quantities[0];
-
-          // Check name for robustness, though it should always be "available".
-          if (quantityInfo && quantityInfo.name === "available") {
-            availableQuantity = quantityInfo.quantity;
-          }
-        }
-        
-        console.log('Extracted available quantity for ' + inventoryItemId + ' in inventoryService: ' + availableQuantity);
-        return availableQuantity;
-      } catch (error) {
-        console.error(`Error fetching inventory level for item ${inventoryItemId}:`, error);
-        // It's important to re-throw or handle the error appropriately.
-        // For now, let's ensure it returns 0 in case of error as per requirements for missing data.
-        // However, logging the error is good. If the calling function expects an error, re-throw.
-        // Given the prior logic returned 0 on missing data, returning 0 on error might be consistent here too.
-        console.log('Extracted available quantity for ' + inventoryItemId + ' in inventoryService: 0 (due to error or missing data)');
-        return 0; // Ensure 0 is returned on error to prevent further issues.
-      }
-    }
-    
     // Get the inventory item ID for this variant
     const inventoryItemId = productGroup.inventoryItemIds[0];
     if (!inventoryItemId) {
@@ -140,20 +73,46 @@ async function handleCartAddition(variantId) {
       return { success: false, message: 'No inventory item found' };
     }
     
-    // Get current inventory level
-    const currentInventory = await getInventoryLevel(inventoryItemId);
+    // Get current inventory level from Shopify for the specific variant (initial quick check)
+    const currentShopifyStock = await _getShopifyInventoryLevelForItem(inventoryItemId);
     
-    // If inventory is zero, reject the addition
-    if (currentInventory <= 0) {
+    if (currentShopifyStock <= 0) {
+      console.log(`[CartAdd] PID: ${productGroup.id}, Variant: ${variantId} - Out of stock based on Shopify direct check (${currentShopifyStock}). Denying cart addition.`);
+      return { success: false, message: 'Out of stock (Shopify direct check)' };
+    }
+
+    // Reservation Logic
+    const activeReservations = await db.getActiveReservationsForGroup(productGroup.id);
+    const totalReservedQuantity = activeReservations.reduce((sum, res) => sum + res.reservedQuantity, 0);
+    const effectiveAvailableStock = productGroup.sharedInventoryCount - totalReservedQuantity;
+
+    console.log(`[CartAdd] PID: ${productGroup.id}, PhysicalStock: ${productGroup.sharedInventoryCount}, TotalReserved: ${totalReservedQuantity}, EffectiveAvailable: ${effectiveAvailableStock}`);
+
+    if (effectiveAvailableStock > 0) {
+      const reservationData = {
+        productGroupId: productGroup.id,
+        variantId: variantId, // The variantId passed into handleCartAddition
+        reservedQuantity: 1, // Assuming we reserve 1 unit per add to cart
+        reservedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000), // Expires in 30 minutes
+        status: 'active'
+        // cartId: cartId, // If cartId can be obtained, add it here
+      };
+
+      await db.createReservation(reservationData);
+      console.log(`[CartAdd] PID: ${productGroup.id}, Reservation created for variant: ${variantId}`);
+
+      // CRITICALLY: The call to syncInventoryForItem(...) is removed.
+      // Inventory is not updated in Shopify at this point, only reserved in our DB.
+
+      return { success: true };
+    } else {
+      console.log(`[CartAdd] PID: ${productGroup.id}, Variant: ${variantId} - Out of stock based on effective stock (${effectiveAvailableStock}). Denying cart addition.`);
       return { success: false, message: 'Out of stock' };
     }
-    
-    // Reduce inventory and update Shopify
-    await syncInventoryForItem(inventoryItemId, currentInventory - 1);
-    
-    return { success: true };
+
   } catch (error) {
-    console.error('Error handling cart addition:', error);
+    console.error(`[CartAdd] Error processing cart addition for variant ${variantId}:`, error);
     return { success: false, message: 'Error processing cart addition' };
   }
 }
@@ -343,5 +302,84 @@ async function checkIfOrderCompleted(variantId) {
 module.exports = {
   syncInventoryForItem,
   handleCartAddition,
+  handleOrderLineItem,
+  // Note: setAllVariantsInventory and other functions are below this, keep them.
+  // Adding the new function _getShopifyInventoryLevelForItem before other utility functions
+  // and checkVariantStockConfirmation at the end before exports.
+};
+
+// Internal utility function to get current inventory level from Shopify for a specific item
+async function _getShopifyInventoryLevelForItem(inventoryItemId) {
+  try {
+    // This log is specific to this function's direct purpose
+    console.log(`[_getShopifyInventoryLevelForItem] Fetching Shopify inventory level for item ${inventoryItemId}...`);
+
+    const inventoryLevelsQuery = `
+      query getInventoryLevels($inventoryItemId: ID!) {
+        inventoryItem(id: $inventoryItemId) {
+          inventoryLevels(first: 1) { # Assuming the first inventory level is the relevant one
+            edges {
+              node {
+                id
+                quantities(names: ["available"]) { # Request only "available" quantity
+                  name # name should be "available"
+                  quantity
+                }
+                location { # Location might be useful for more complex scenarios, not used directly here
+                  id
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`
+    };
+
+    const result = await shopifyClient.request(inventoryLevelsQuery, variables);
+    // Log the raw result for this specific item query
+    console.log(`[_getShopifyInventoryLevelForItem] Fetched inventoryItem data for ID ${inventoryItemId}:`, JSON.stringify(result, null, 2));
+
+    let availableQuantity = 0;
+
+    if (result.inventoryItem &&
+        result.inventoryItem.inventoryLevels &&
+        result.inventoryItem.inventoryLevels.edges &&
+        result.inventoryItem.inventoryLevels.edges.length > 0 &&
+        result.inventoryItem.inventoryLevels.edges[0].node &&
+        result.inventoryItem.inventoryLevels.edges[0].node.quantities &&
+        result.inventoryItem.inventoryLevels.edges[0].node.quantities.length > 0) {
+
+      const quantityInfo = result.inventoryItem.inventoryLevels.edges[0].node.quantities[0];
+      if (quantityInfo && quantityInfo.name === "available") {
+        availableQuantity = quantityInfo.quantity;
+      }
+    }
+
+    console.log(`[_getShopifyInventoryLevelForItem] Extracted available quantity for ${inventoryItemId}: ${availableQuantity}`);
+    return availableQuantity;
+  } catch (error) {
+    console.error(`[_getShopifyInventoryLevelForItem] Error fetching Shopify inventory level for item ${inventoryItemId}:`, error);
+    // It's important for the caller to handle this. Returning 0 might be misleading.
+    // Let's throw the error so the caller knows the fetch failed.
+    // Or, return a specific value like -1 or null to indicate failure if preferred by callers.
+    // For now, re-throwing to make failure explicit.
+    // However, the original nested function returned 0 on error. To maintain that behavior for handleCartAddition:
+    console.log(`[_getShopifyInventoryLevelForItem] Extracted available quantity for ${inventoryItemId}: 0 (due to error or missing data)`);
+    return 0; // Ensure 0 is returned on error to mimic original behavior for handleCartAddition
+  }
+}
+
+// Removed checkVariantStockConfirmation function
+
+module.exports = {
+  syncInventoryForItem,
+  handleCartAddition,
   handleOrderLineItem
+  // Removed checkVariantStockConfirmation from exports
+  // Ensure setAllVariantsInventory, updateShopifyInventory, getInventoryItemLocationId, checkIfOrderCompleted are still implicitly part of exports if they were before, or add them explicitly if they were missing.
+  // Based on previous file reads, they were not in module.exports. This should be fine.
 };

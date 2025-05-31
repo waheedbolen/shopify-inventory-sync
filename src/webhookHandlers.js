@@ -32,21 +32,53 @@ async function handleInventoryUpdate(req, res) {
  */
 async function handleOrderCreate(req, res) {
   try {
-    const data = req.body;
-    console.log('Received order create webhook:', JSON.stringify(data));
+    const order = req.body; // Renamed data to order for clarity
+    console.log('Received order create webhook:', JSON.stringify(order, null, 2));
     
-    // Extract line items from the order
-    const lineItems = data.line_items || [];
+    const lineItems = order.line_items; // Direct access, assuming body is parsed JSON
+    if (!Array.isArray(lineItems) || lineItems.length === 0) {
+      console.log('[OrderCreate] No line items found in the order or line_items is not an array. No inventory processing needed.');
+      return res.status(200).send('Order webhook processed. No line items to process for inventory.');
+    }
     
-    // Process each line item to sync inventory
     for (const item of lineItems) {
-      const variantId = item.variant_id;
-      if (variantId) {
-        await inventoryService.handleOrderLineItem(variantId);
+      const variant_id = item.variant_id; // Using variable name from prompt
+      const ordered_quantity = item.quantity;
+
+      if (variant_id && typeof ordered_quantity === 'number' && ordered_quantity > 0) {
+        console.log(`[OrderCreate] Processing order line item for variantId: ${variant_id}, quantity: ${ordered_quantity}`);
+
+        const productGroup = await db.findProductGroupByVariantId(variant_id);
+
+        if (productGroup) {
+          // Consume reservations
+          const consumedCount = await db.consumeReservationsForGroup(productGroup.id, ordered_quantity);
+          console.log(`[OrderCreate] PID: ${productGroup.id}, Consumed ${consumedCount} reservation units for ordered quantity ${ordered_quantity}`);
+          // Note: The prompt mentions a potential mismatch if consumedCount != ordered_quantity.
+          // For now, this is just logged. Further error handling/alerting could be added here.
+
+          // Calculate new definitive shared inventory
+          const newSharedInventoryCount = productGroup.sharedInventoryCount - ordered_quantity;
+          console.log(`[OrderCreate] PID: ${productGroup.id}, Decrementing sharedInventoryCount from ${productGroup.sharedInventoryCount} to ${newSharedInventoryCount}`);
+
+          // Update sharedInventoryCount in the app's database
+          await db.updateProductGroupInventory(productGroup.id, newSharedInventoryCount);
+
+          // Update the in-memory product group's count for the Shopify update call
+          productGroup.sharedInventoryCount = newSharedInventoryCount;
+
+          // Update Shopify's inventory for all variants in this group
+          await inventoryService.setAllVariantsInventory(productGroup, newSharedInventoryCount);
+          console.log(`[OrderCreate] PID: ${productGroup.id}, Shopify inventory sync initiated for all variants to level ${newSharedInventoryCount}`);
+        } else {
+          console.warn(`[OrderCreate] No product group found for ordered variantId: ${variant_id}. Cannot process inventory or reservations.`);
+        }
+      } else {
+        console.warn('[OrderCreate] Skipping line item due to missing variant_id or invalid quantity:', JSON.stringify(item, null, 2));
       }
     }
     
-    res.status(200).send('Order webhook processed successfully');
+    res.status(200).send('Order creation webhook processed. Reservations consumed and Shopify inventory updated where applicable.');
   } catch (error) {
     console.error('Error processing order create webhook:', error);
     res.status(500).send('Error processing webhook');
