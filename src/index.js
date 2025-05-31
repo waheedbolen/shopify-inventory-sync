@@ -9,14 +9,14 @@ const config = require('./config');
 const webhookHandlers = require('./webhookHandlers');
 const inventoryService = require('./inventoryService');
 const productService = require('./productService');
-const verifyShopifyWebhook = require('./verifyShopifyWebhook'); // Added import
+// const verifyShopifyWebhook = require('./verifyShopifyWebhook'); // Removed import
 
 // Initialize Express app
 const app = express();
 
 // Middleware
 app.use(cors());
-// app.use(bodyParser.json()); // Removed global JSON parser
+app.use(bodyParser.json()); // Restored global JSON parser
 
 // Initialize Shopify API
 const shopify = shopifyApi({
@@ -31,41 +31,41 @@ const shopify = shopifyApi({
 });
 
 // Register webhook handlers
-const rawBodyParser = bodyParser.raw({ type: 'application/json', limit: '5mb' });
+// const rawBodyParser = bodyParser.raw({ type: 'application/json', limit: '5mb' }); // Removed rawBodyParser
 
 app.post(
   `${config.app.webhookPath}/inventory-update`,
-  rawBodyParser,
-  verifyShopifyWebhook,
+  // rawBodyParser, // Removed
+  // verifyShopifyWebhook, // Removed
   webhookHandlers.handleInventoryUpdate
 );
 app.post(
   `${config.app.webhookPath}/order-create`,
-  rawBodyParser,
-  verifyShopifyWebhook,
+  // rawBodyParser, // Removed
+  // verifyShopifyWebhook, // Removed
   webhookHandlers.handleOrderCreate
 );
 app.post(
   `${config.app.webhookPath}/product-update`,
-  rawBodyParser,
-  verifyShopifyWebhook,
+  // rawBodyParser, // Removed
+  // verifyShopifyWebhook, // Removed
   webhookHandlers.handleProductUpdate
 );
 app.post(
   `${config.app.webhookPath}/product-create`,
-  rawBodyParser,
-  verifyShopifyWebhook,
+  // rawBodyParser, // Removed
+  // verifyShopifyWebhook, // Removed
   webhookHandlers.handleProductCreate
 );
 app.post(
   `${config.app.webhookPath}/order-cancelled`,
-  rawBodyParser,
-  verifyShopifyWebhook,
+  // rawBodyParser, // Removed
+  // verifyShopifyWebhook, // Removed
   webhookHandlers.handleOrderCancelled
 );
 
 // Cart API endpoints
-app.post(`${config.app.cartApiPath}/add`, bodyParser.json(), async (req, res) => { // Added bodyParser.json() here
+app.post(`${config.app.cartApiPath}/add`, async (req, res) => { // Removed specific bodyParser.json() here
   try {
     const { variantId } = req.body;
     if (!variantId) {
