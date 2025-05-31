@@ -99,7 +99,7 @@ async function handleCartAddition(variantId) {
         
         const result = await shopifyClient.request(inventoryLevelsQuery, variables);
         console.log('Fetched inventoryItem data for ID ' + inventoryItemId + ' in inventoryService:', JSON.stringify(result, null, 2));
-        
+
         let availableQuantity = 0;
         
         if (result.inventoryItem &&
@@ -109,11 +109,11 @@ async function handleCartAddition(variantId) {
             result.inventoryItem.inventoryLevels.edges[0].node &&
             result.inventoryItem.inventoryLevels.edges[0].node.quantities &&
             result.inventoryItem.inventoryLevels.edges[0].node.quantities.length > 0) {
-          
-          // The query requests quantities(names: ["available"]), 
+
+          // The query requests quantities(names: ["available"]),
           // so quantities[0] should be the "available" quantity.
           const quantityInfo = result.inventoryItem.inventoryLevels.edges[0].node.quantities[0];
-          
+
           // Check name for robustness, though it should always be "available".
           if (quantityInfo && quantityInfo.name === "available") {
             availableQuantity = quantityInfo.quantity;
@@ -124,7 +124,7 @@ async function handleCartAddition(variantId) {
         return availableQuantity;
       } catch (error) {
         console.error(`Error fetching inventory level for item ${inventoryItemId}:`, error);
-        // It's important to re-throw or handle the error appropriately. 
+        // It's important to re-throw or handle the error appropriately.
         // For now, let's ensure it returns 0 in case of error as per requirements for missing data.
         // However, logging the error is good. If the calling function expects an error, re-throw.
         // Given the prior logic returned 0 on missing data, returning 0 on error might be consistent here too.
@@ -227,7 +227,7 @@ async function updateShopifyInventory(inventoryItemId, availableQuantity) {
       mutation inventorySetQuantities($input: InventorySetQuantitiesInput!) {
         inventorySetQuantities(input: $input) {
           inventoryAdjustmentGroup {
-            createdAt 
+            createdAt
           }
           userErrors {
             field

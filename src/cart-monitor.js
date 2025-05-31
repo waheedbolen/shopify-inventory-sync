@@ -165,7 +165,7 @@
     } catch (error) {
       console.error('Shopify Inventory Sync: Error notifying server', error);
       // Return failure to prevent overselling if the server is unreachable or errors.
-      return { success: false, message: "Error: Could not verify stock. Please try again." }; 
+      return { success: false, message: "Error: Could not verify stock. Please try again." };
     }
   }
   

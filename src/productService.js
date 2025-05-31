@@ -198,13 +198,13 @@ async function getAllProducts() {
             })
           };
         });
-        
+
         allProductsArray = allProductsArray.concat(fetchedProducts);
         hasNextPage = result.products.pageInfo.hasNextPage;
         afterCursor = result.products.pageInfo.endCursor;
-        
+
         console.log(`Fetched a page of products. Total products so far: ${allProductsArray.length}. Has next page: ${hasNextPage}`);
-        
+
         // Safety break if endCursor is null but hasNextPage is true (should not happen with Shopify)
         if (hasNextPage && !afterCursor) {
             console.warn('hasNextPage is true but endCursor is null. Breaking loop to prevent infinite loop.');
@@ -313,14 +313,14 @@ async function getInventoryLevel(inventoryItemId) {
     
     const result = await shopifyClient.request(query, variables);
     console.log('Fetched inventoryItem data for ID ' + inventoryItemId + ':', JSON.stringify(result, null, 2));
-    
+
     let totalAvailable = 0;
-    
+
     if (result.inventoryItem && result.inventoryItem.inventoryLevels && result.inventoryItem.inventoryLevels.edges) {
       for (const edge of result.inventoryItem.inventoryLevels.edges) {
         // Check if node and quantities exist, and quantities array is not empty
         if (edge.node && edge.node.quantities && edge.node.quantities.length > 0) {
-          // The query requests quantities(names: ["available"]), so the first item 
+          // The query requests quantities(names: ["available"]), so the first item
           // in the quantities array should be the "available" quantity.
           // We also check name for robustness, though it should always be "available".
           const quantityInfo = edge.node.quantities[0];
