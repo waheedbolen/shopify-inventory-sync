@@ -97,23 +97,20 @@ async function handleProductCreate(req, res) {
  */
 async function handleOrderCancelled(req, res) {
   try {
-    const order = req.body;
-    console.log('Received order cancelled webhook:', JSON.stringify(order, null, 2));
+    console.log('Received order cancelled webhook. Payload:', JSON.stringify(req.body, null, 2));
 
-    const lineItems = order.line_items || [];
-    if (lineItems.length === 0) {
-      console.log('No line items found in the cancelled order. No restocking needed.');
-      return res.status(200).send('Order cancellation processed. No line items to restock.');
+    const lineItems = req.body.line_items; // Direct access, assuming body is parsed JSON
+    if (!Array.isArray(lineItems) || lineItems.length === 0) {
+      console.log('No line items found in the cancelled order or line_items is not an array. No restocking needed.');
+      return res.status(200).send('Order cancellation processed. No line items to restock or invalid format.');
     }
 
     for (const item of lineItems) {
-      // Assuming inventory_item_id is directly available on the line item.
-      // If not, one might need to fetch variant details using item.variant_id first.
-      const inventoryItemId = item.inventory_item_id;
+      const inventoryItemId = item.inventory_item_id; // Prioritize direct access
       const quantity = item.quantity;
 
       if (inventoryItemId && typeof quantity === 'number' && quantity > 0) {
-        console.log(`Processing cancellation for inventory_item_id: ${inventoryItemId}, quantity: ${quantity}`);
+        console.log(`Processing cancellation for inventory_item_id: ${inventoryItemId}, quantity to restock: ${quantity}`);
 
         const productGroup = await db.findProductGroupByInventoryItemId(inventoryItemId);
 
@@ -121,23 +118,22 @@ async function handleOrderCancelled(req, res) {
           const newSharedInventoryCount = productGroup.sharedInventoryCount + quantity;
           console.log(`Restocking product group ${productGroup.id} from ${productGroup.sharedInventoryCount} to ${newSharedInventoryCount}`);
 
-          // Update the database with the new shared inventory count
           await db.updateProductGroupInventory(productGroup.id, newSharedInventoryCount);
+          productGroup.sharedInventoryCount = newSharedInventoryCount; // Update in-memory count for subsequent calls if any within same webhook
 
-          // Update Shopify for all variants in the group using the new count
-          // Assuming setAllVariantsInventory will use the newSharedInventoryCount for all items in the group
           await inventoryService.setAllVariantsInventory(productGroup, newSharedInventoryCount);
 
-          console.log(`Successfully restocked inventory for product group ${productGroup.id}`);
+          console.log(`Successfully restocked item ${inventoryItemId} for product group ${productGroup.id}`);
         } else {
-          console.log(`No product group found for cancelled inventory_item_id: ${inventoryItemId}. Skipping restock for this item.`);
+          console.warn(`No product group found for cancelled inventory_item_id: ${inventoryItemId}. Skipping restock.`);
         }
       } else {
-        console.warn(`Skipping line item due to missing inventory_item_id or invalid quantity: ${JSON.stringify(item)}`);
+        // Log details of the item that's being skipped
+        console.warn('Skipping line item due to missing inventory_item_id or invalid quantity:', JSON.stringify(item, null, 2));
       }
     }
 
-    res.status(200).send('Order cancellation processed and inventory restocked where applicable.');
+    res.status(200).send('Order cancellation processed. Inventory restocked where applicable.');
   } catch (error) {
     console.error('Error processing order cancelled webhook:', error);
     res.status(500).send('Error processing webhook');
