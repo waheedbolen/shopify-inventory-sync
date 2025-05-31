@@ -194,16 +194,30 @@ async function handleOrderLineItem(variantId) {
  * @param {number} inventoryLevel - The inventory level to set
  */
 async function setAllVariantsInventory(productGroup, inventoryLevel) {
+  console.log(`[PID:${productGroup.id}] Starting setAllVariantsInventory. Target level: ${inventoryLevel}. Variants to update: ${productGroup.inventoryItemIds.length}`);
+  let successCount = 0;
+  let failureCount = 0;
+
   try {
-    console.log(`Setting inventory level ${inventoryLevel} for all variants in product group ${productGroup.id}`);
-    
     // Update inventory for each inventory item in the product group
     for (const inventoryItemId of productGroup.inventoryItemIds) {
-      await updateShopifyInventory(inventoryItemId, inventoryLevel);
+      console.log(`[PID:${productGroup.id}] Attempting to update inventoryItemId: ${inventoryItemId} to level: ${inventoryLevel}`);
+      try {
+        await updateShopifyInventory(inventoryItemId, inventoryLevel);
+        console.log(`[PID:${productGroup.id}] Successfully updated inventoryItemId: ${inventoryItemId}`);
+        successCount++;
+      } catch (itemError) {
+        console.error(`[PID:${productGroup.id}] Failed to update inventoryItemId: ${inventoryItemId}. Error:`, itemError);
+        failureCount++;
+        // Decide if one failure should stop the whole process or continue with other variants.
+        // For now, let's continue and log failures.
+      }
     }
-  } catch (error) {
-    console.error('Error setting inventory for variants:', error);
-    throw error;
+  } catch (error) { // This catch is for errors in the looping logic itself, not item updates
+    console.error(`[PID:${productGroup.id}] Critical error during setAllVariantsInventory loop:`, error);
+    throw error; // Re-throw if the loop itself fails critically
+  } finally {
+    console.log(`[PID:${productGroup.id}] Finished setAllVariantsInventory. Successes: ${successCount}, Failures: ${failureCount}. Target level was: ${inventoryLevel}`);
   }
 }
 
